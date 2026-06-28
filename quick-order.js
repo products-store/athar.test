@@ -1,11 +1,11 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Discord Webhook URL
-    const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1481703762274947106/Bda8WkM_WQyKA9_RbJBwjDoqBrl-fxxB4zYyJqApA5c1NLVQv6jc3q8yCuIqZc-afe_Y';
-
-    // Google Sheets Web App URL - استبدل هذا برابط الـ Web App الخاص بك
+    // Discord Webhook URL - IMPORTANT: In a real production app, this should be sent from a backend server, not directly from frontend.
+    const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1450619362489929779/aY4FOLWR4zZPvaUhNrgpApklD2-58nOvzEvgzMulspgLv6n4XSy3K1ahaWvKPq3pGf0r';
+    
+    // Google Sheets Web App URL - استبدله برابط الـ Web App الخاص بك
     const GOOGLE_SHEETS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbzqgWvG970Dx_OvdmBWxYML_zglpZQfQ1Q3ySQG1zWwnCpRkaxf0KprjJDWK05PlIyM/exec';
 
-    // Data for Algerian Wilayas
+    // Data for Algerian Wilayas (Provinces) and delivery prices
     const wilayaPrices = [
         { name: 'أدرار', home: 1450, office: 1070, cancel: 200 },
         { name: 'الشلف', home: 850, office: 570, cancel: 200 },
@@ -85,11 +85,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let productsTotalPrice = 0;
     let currentDeliveryPrice = 0;
     let selectedWilayaData = null;
-    let selectedDeliveryMethod = 'office';
-    const productPrice = 2900;
+    let selectedDeliveryMethod = 'office'; // Default delivery method
+    const productPrice = 2900; // سعر المنتج
 
     // --- Functions ---
 
+    // Populate Wilaya dropdown
     const populateWilayas = () => {
         wilayaPrices.forEach(wilaya => {
             const option = document.createElement('option');
@@ -99,6 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
+    // Calculate product subtotal based on quantity
     const calculateProductsSubtotal = () => {
         const quantity = parseInt(quantityInput.value) || 1;
         productsTotalPrice = productPrice * quantity;
@@ -106,11 +108,13 @@ document.addEventListener('DOMContentLoaded', () => {
         return productsTotalPrice;
     };
 
+    // Calculate and update delivery price and grand total
     const updateOrderTotals = () => {
-        let currentTotal = calculateProductsSubtotal();
+        let currentTotal = calculateProductsSubtotal(); // تحديث السعر أولاً
         currentDeliveryPrice = 0;
 
         if (selectedWilayaData) {
+            // Check if selected delivery method is available for the wilaya
             if (selectedDeliveryMethod === 'office' && selectedWilayaData.office === null) {
                 alert(`التوصيل للمكتب غير متاح في ولاية ${selectedWilayaData.name}. سيتم تحويلك إلى التوصيل للمنزل.`);
                 quickDeliveryToHomeRadio.checked = true;
@@ -119,15 +123,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (selectedDeliveryMethod === 'home') {
                 currentDeliveryPrice = selectedWilayaData.home;
-                quickCommuneGroup.style.display = 'block';
+                quickCommuneGroup.style.display = 'block'; // Show commune field for home delivery
                 quickCommuneInput.setAttribute('required', 'true');
-            } else {
+            } else { // 'office'
                 currentDeliveryPrice = selectedWilayaData.office;
-                quickCommuneGroup.style.display = 'none';
+                quickCommuneGroup.style.display = 'none'; // Hide commune field for office delivery
                 quickCommuneInput.removeAttribute('required');
-                quickCommuneInput.value = '';
+                quickCommuneInput.value = ''; // Clear commune input
             }
         } else {
+            // No wilaya selected, hide commune field and set delivery price to 0
             quickCommuneGroup.style.display = 'none';
             quickCommuneInput.removeAttribute('required');
             quickCommuneInput.value = '';
@@ -138,21 +143,23 @@ document.addEventListener('DOMContentLoaded', () => {
         quickOrderGrandTotalElement.textContent = `${currentTotal.toLocaleString('ar-DZ')} د.ج`;
     };
 
+    // Function to handle quantity changes
     const handleQuantityChange = () => {
-        updateOrderTotals();
+        updateOrderTotals(); // تحديث الأسعار عند تغيير الكمية
     };
 
-    // --- وظيفة إرسال البيانات إلى Google Sheets ---
+    // دالة إرسال الطلب إلى Google Sheets
     const sendToGoogleSheets = async (order) => {
+        // بناء البيانات المرسلة
         const sheetData = {
             orderId: order.id,
             date: order.date,
             fullName: order.shippingInfo.fullName,
             phone: order.shippingInfo.phone,
-            alternativePhone: order.shippingInfo.alternativePhone || 'لا يوجد',
+            alternativePhone: order.shippingInfo.alternativePhone,
             wilaya: order.shippingInfo.wilaya,
             deliveryMethod: order.shippingInfo.deliveryMethod === 'home' ? 'توصيل للمنزل' : 'توصيل للمكتب',
-            commune: order.shippingInfo.commune || 'غير قابل للتطبيق',
+            commune: order.shippingInfo.commune,
             productName: order.items.map(item => item.name).join(', '),
             color: order.items.map(item => item.color).join(', '),
             size: order.items.map(item => item.size).join(', '),
@@ -176,19 +183,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify(sheetData),
             });
 
-            if (!response.ok) {
-                console.error('Google Sheets Error:', response.status, response.statusText);
-                return false;
-            }
-
             const result = await response.json();
-            if (result && result.success === true) {
-                console.log('Order saved to Google Sheets successfully!');
-                return true;
-            } else {
+            if (!response.ok || !result.success) {
                 console.error('Google Sheets Error:', result);
                 return false;
             }
+            console.log('Order saved to Google Sheets successfully!');
+            return true;
         } catch (error) {
             console.error('Error sending to Google Sheets:', error);
             return false;
@@ -197,10 +198,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Send data to Discord webhook
     const sendToDiscordWebhook = async (order) => {
+        // إنشاء قائمة المنتجات بشكل منظم
         const orderItemsList = order.items.map(item => 
             `${item.name} (${item.color}، ${item.size}) × ${item.quantity} = ${(item.price * item.quantity).toLocaleString('ar-DZ')} د.ج`
         ).join('\n');
 
+        // تحديد طريقة التوصيل
         const deliveryMethodText = order.shippingInfo.deliveryMethod === 'home' 
             ? `التوصيل إلى المنزل (${order.shippingInfo.commune})`
             : 'التوصيل إلى مكتب البريد';
@@ -209,7 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
             username: "ATHAR Order Bot",
             embeds: [
                 {
-                    title: "طلب جديد 📦 (طلب سريع)",
+                    title: "طلب جديد 📦",
                     color: 0x28A745,
                     fields: [
                         {
@@ -235,7 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     ],
                     timestamp: new Date().toISOString(),
                     footer: {
-                        text: "ATHAR Store (Quick Order) - " + new Date().toLocaleString('ar-DZ')
+                        text: "ATHAR Store - " + new Date().toLocaleString('ar-DZ')
                     }
                 }
             ]
@@ -266,22 +269,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Event Listeners and Initial Setup ---
 
+    // Populate wilayas on page load
     populateWilayas();
+
+    // Initial calculation of product subtotal
     calculateProductsSubtotal();
     
+    // Set initial delivery method based on radio checked state
     if (quickDeliveryToHomeRadio.checked) {
         selectedDeliveryMethod = 'home';
-    } else {
+    } else { // default to office
         selectedDeliveryMethod = 'office';
     }
-    updateOrderTotals();
+    updateOrderTotals(); // Initial update of totals (important to show initial delivery price)
 
+    // Event listener for wilaya selection change
     quickWilayaSelect.addEventListener('change', () => {
         const selectedWilayaName = quickWilayaSelect.value;
         selectedWilayaData = wilayaPrices.find(w => w.name === selectedWilayaName);
         updateOrderTotals();
     });
 
+    // Event listener for delivery method change
     quickDeliveryMethodRadios.forEach(radio => {
         radio.addEventListener('change', (event) => {
             selectedDeliveryMethod = event.target.value;
@@ -289,8 +298,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Event listeners for quantity changes
     quantityInput.addEventListener('change', handleQuantityChange);
-    quantityInput.addEventListener('input', handleQuantityChange);
+    quantityInput.addEventListener('input', handleQuantityChange); // تحديث فوري أثناء الكتابة
+    
+    // Event listeners for plus/minus buttons
     minusBtn.addEventListener('click', handleQuantityChange);
     plusBtn.addEventListener('click', handleQuantityChange);
 
@@ -307,7 +319,7 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('الرجاء إدخال رقم الهاتف الأساسي.');
             return;
         }
-        if (quickPhoneInput.value.trim().length < 9 || !/^\d+$/.test(quickPhoneInput.value.trim())) {
+        if (quickPhoneInput.value.trim().length < 9 || !/^\d+$/.test(quickPhoneInput.value.trim())) { // At least 9 digits, digits only
              alert('رقم الهاتف الأساسي غير صحيح. الرجاء إدخال 9 أرقام على الأقل.');
              return;
         }
@@ -326,18 +338,24 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // Ensure wilaya and delivery method are correctly set before order creation
         if (!selectedWilayaData) {
+            // This should ideally not happen if Wilaya select is required, but as a safeguard
             alert('الرجاء اختيار ولاية صالحة قبل تأكيد الطلب.');
             return;
         }
 
+        // Get selected color and size from the main product section
         const selectedColorBtn = document.querySelector('.color-btn.active');
         const selectedSizeBtn = document.querySelector('.size-btn.active');
         const selectedColor = selectedColorBtn ? selectedColorBtn.dataset.color : 'black';
         const selectedSize = selectedSizeBtn ? selectedSizeBtn.dataset.size : '52';
         const quantity = parseInt(quantityInput.value) || 1;
+
+        // Get user-friendly color name
         const userFriendlyColor = productDetails.colors[selectedColor].name;
 
+        // Construct shipping information
         const shippingInfo = {
             fullName: quickFullNameInput.value.trim(),
             phone: quickPhoneInput.value.trim(),
@@ -348,6 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
             paymentMethod: "cashOnDelivery"
         };
 
+        // Create a single item for the order
         const orderItem = {
             id: `${selectedColor}-${selectedSize}`,
             name: productDetails.name,
@@ -358,6 +377,7 @@ document.addEventListener('DOMContentLoaded', () => {
             image: productDetails.colors[selectedColor].main
         };
 
+        // Construct the full order object
         const order = {
             id: 'ORD-' + Date.now(),
             date: new Date().toLocaleString('ar-DZ', { timeZone: 'Africa/Algiers' }),
@@ -369,28 +389,32 @@ document.addEventListener('DOMContentLoaded', () => {
             status: 'Pending'
         };
 
-        // ✅ إرسال إلى Discord أولاً
+        // Attempt to send to Discord
         const webhookSent = await sendToDiscordWebhook(order);
 
         if (webhookSent) {
-            // ✅ ثم إرسال إلى Google Sheets
+            // بعد التأكد من نجاح إرسال Discord، أرسل إلى Google Sheets
             const sheetsSent = await sendToGoogleSheets(order);
-            
-            if (sheetsSent) {
-                console.log('✅ Quick order saved to both Discord and Google Sheets');
-            } else {
-                console.warn('⚠️ Quick order saved to Discord but failed to save to Google Sheets');
+            if (!sheetsSent) {
+                console.warn('Failed to save to Google Sheets, but Discord sent successfully.');
             }
 
+            // Save the order to localStorage (optional, for history or admin panel)
             let allOrders = JSON.parse(localStorage.getItem('qudwahOrders')) || [];
             allOrders.push(order);
             localStorage.setItem('qudwahOrders', JSON.stringify(allOrders));
 
+            // Update global cart count
             const cartCountElement = document.querySelector('.cart-count');
             if (cartCountElement) {
                 cartCountElement.textContent = quantity;
             }
 
+            // Redirect to confirmation page
+            if (confirm('لقد تم استلام طلبك ، سنتصل بك للتأكيد. اضغط موافق للعودة للصفحة الرئيسية.')) {
+                window.location.href = 'index.html';
+            }
+            // بعد تأكيد الطلب بنجاح
             fbq('track', 'Purchase', {
                 value: order.totalAmount,
                 currency: 'DZD',
@@ -400,14 +424,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     item_price: item.price
                 }))
             });
-
-            if (confirm('✅ لقد تم استلام طلبك، سنتصل بك للتأكيد. اضغط موافق للعودة للصفحة الرئيسية.')) {
-                window.location.href = 'index.html';
-            }
+        } else {
+            // If webhook failed, alert was already shown by sendToDiscordWebhook
+            // Do not redirect, allow user to retry
         }
     });
 
-    // تحميل المعلومات المحفوظة
+    // Optional: Load saved info if available from previous session (user convenience)
     const savedInfo = JSON.parse(localStorage.getItem('qudwahShippingInfo'));
     if (savedInfo) {
         quickFullNameInput.value = savedInfo.fullName || '';
@@ -423,35 +446,37 @@ document.addEventListener('DOMContentLoaded', () => {
             quickDeliveryToHomeRadio.checked = true;
             selectedDeliveryMethod = 'home';
             quickCommuneInput.value = savedInfo.commune || '';
-        } else {
+        } else { // default to office
             quickDeliveryToOfficeRadio.checked = true;
             selectedDeliveryMethod = 'office';
         }
-        updateOrderTotals();
+        updateOrderTotals(); // Recalculate totals based on loaded info
     } else {
+        // Ensure initial calculation runs even if no saved info
         calculateProductsSubtotal();
         updateOrderTotals();
     }
 
-    // حفظ المعلومات عند الإدخال
+    // Save info to localStorage on input change (for user convenience, to persist inputs if they leave)
     const saveInfoOnInput = () => {
         const currentInfo = {
             fullName: quickFullNameInput.value.trim(),
             phone: quickPhoneInput.value.trim(),
             alternativePhone: quickAlternativePhoneInput.value.trim(),
             wilaya: quickWilayaSelect.value,
-            deliveryMethod: selectedDeliveryMethod,
+            deliveryMethod: selectedDeliveryMethod, // Ensure this reflects current radio selection
             commune: quickCommuneInput.value.trim()
         };
         localStorage.setItem('qudwahShippingInfo', JSON.stringify(currentInfo));
     };
 
+    // Attach saveInfoOnInput to relevant input changes
     quickFullNameInput.addEventListener('input', saveInfoOnInput);
     quickPhoneInput.addEventListener('input', saveInfoOnInput);
     quickAlternativePhoneInput.addEventListener('input', saveInfoOnInput);
     quickWilayaSelect.addEventListener('change', saveInfoOnInput);
     quickDeliveryMethodRadios.forEach(radio => radio.addEventListener('change', () => {
-        selectedDeliveryMethod = radio.value;
+        selectedDeliveryMethod = radio.value; // Update selectedDeliveryMethod when radio changes
         saveInfoOnInput();
     }));
     quickCommuneInput.addEventListener('input', saveInfoOnInput);
