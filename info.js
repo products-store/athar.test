@@ -1,9 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Discord Webhook URL
-    const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1481703762274947106/Bda8WkM_WQyKA9_RbJBwjDoqBrl-fxxB4zYyJqApA5c1NLVQv6jc3q8yCuIqZc-afe_Y';
-
-    // Google Sheets Web App URL - استبدل هذا برابط الـ Web App الخاص بك
-    const GOOGLE_SHEETS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbzqgWvG970Dx_OvdmBWxYML_zglpZQfQ1Q3ySQG1zWwnCpRkaxf0KprjJDWK05PlIyM/exec';
+    // Discord Webhook URL - IMPORTANT: In a real production app, this should be sent from a backend server, not directly from frontend.
+    const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1450619362489929779/aY4FOLWR4zZPvaUhNrgpApklD2-58nOvzEvgzMulspgLv6n4XSy3K1ahaWvKPq3pGf0r';
+    
+    // Google Sheets Web App URL - استبدله برابط الـ Web App الخاص بك
+    const GOOGLE_SHEETS_WEBHOOK_URL = 'https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec';
 
     // Data for Algerian Wilayas (Provinces) and delivery prices
     const wilayaPrices = [
@@ -74,6 +74,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const deliveryToHomeRadio = document.getElementById('deliveryToHome');
     const communeGroup = document.getElementById('commune-group');
     const communeInput = document.getElementById('commune');
+    const heightInput = document.getElementById('height');
+    const weightInput = document.getElementById('weight');
     const productsSubtotalElement = document.getElementById('products-subtotal');
     const deliveryPriceElement = document.getElementById('delivery-price');
     const orderGrandTotalElement = document.getElementById('order-grand-total');
@@ -85,7 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let productsTotalPrice = 0;
     let currentDeliveryPrice = 0;
     let selectedWilayaData = null;
-    let selectedDeliveryMethod = 'office';
+    let selectedDeliveryMethod = 'office'; // Default delivery method
 
     // Redirect if cart is empty
     if (cart.length === 0) {
@@ -107,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
             cartCountElement.textContent = totalItems;
         }
     };
-
+    
     // Populate Wilaya dropdown
     const populateWilayas = () => {
         wilayaPrices.forEach(wilaya => {
@@ -133,6 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
         currentDeliveryPrice = 0;
 
         if (selectedWilayaData) {
+            // Check if selected delivery method is available for the wilaya
             if (selectedDeliveryMethod === 'office' && selectedWilayaData.office === null) {
                 alert(`التوصيل للمكتب غير متاح في ولاية ${selectedWilayaData.name}. سيتم تحويلك إلى التوصيل للمنزل.`);
                 deliveryToHomeRadio.checked = true;
@@ -141,15 +144,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (selectedDeliveryMethod === 'home') {
                 currentDeliveryPrice = selectedWilayaData.home;
-                communeGroup.style.display = 'block';
+                communeGroup.style.display = 'block'; // Show commune field for home delivery
                 communeInput.setAttribute('required', 'true');
-            } else {
+            } else { // 'office'
                 currentDeliveryPrice = selectedWilayaData.office;
-                communeGroup.style.display = 'none';
+                communeGroup.style.display = 'none'; // Hide commune field for office delivery
                 communeInput.removeAttribute('required');
-                communeInput.value = '';
+                communeInput.value = ''; // Clear commune input
             }
         } else {
+            // No wilaya selected, hide commune field and set delivery price to 0
             communeGroup.style.display = 'none';
             communeInput.removeAttribute('required');
             communeInput.value = '';
@@ -160,17 +164,18 @@ document.addEventListener('DOMContentLoaded', () => {
         orderGrandTotalElement.textContent = `${currentTotal.toLocaleString('ar-DZ')} د.ج`;
     };
 
-    // --- وظيفة إرسال البيانات إلى Google Sheets ---
+    // دالة إرسال الطلب إلى Google Sheets
     const sendToGoogleSheets = async (order) => {
+        // بناء البيانات المرسلة
         const sheetData = {
             orderId: order.id,
             date: order.date,
             fullName: order.shippingInfo.fullName,
             phone: order.shippingInfo.phone,
-            alternativePhone: order.shippingInfo.alternativePhone || 'لا يوجد',
+            alternativePhone: order.shippingInfo.alternativePhone,
             wilaya: order.shippingInfo.wilaya,
             deliveryMethod: order.shippingInfo.deliveryMethod === 'home' ? 'توصيل للمنزل' : 'توصيل للمكتب',
-            commune: order.shippingInfo.commune || 'غير قابل للتطبيق',
+            commune: order.shippingInfo.commune,
             productName: order.items.map(item => item.name).join(', '),
             color: order.items.map(item => item.color).join(', '),
             size: order.items.map(item => item.size).join(', '),
@@ -194,19 +199,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify(sheetData),
             });
 
-            if (!response.ok) {
-                console.error('Google Sheets Error:', response.status, response.statusText);
-                return false;
-            }
-
             const result = await response.json();
-            if (result && result.success === true) {
-                console.log('Order saved to Google Sheets successfully!');
-                return true;
-            } else {
+            if (!response.ok || !result.success) {
                 console.error('Google Sheets Error:', result);
                 return false;
             }
+            console.log('Order saved to Google Sheets successfully!');
+            return true;
         } catch (error) {
             console.error('Error sending to Google Sheets:', error);
             return false;
@@ -215,10 +214,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Send data to Discord webhook
     const sendToDiscordWebhook = async (order) => {
+        // إنشاء قائمة المنتجات بشكل منظم
         const orderItemsList = order.items.map(item => 
             `${item.name} (${item.color}، ${item.size}) × ${item.quantity} = ${(item.price * item.quantity).toLocaleString('ar-DZ')} د.ج`
         ).join('\n');
 
+        // تحديد طريقة التوصيل
         const deliveryMethodText = order.shippingInfo.deliveryMethod === 'home' 
             ? `التوصيل إلى المنزل (${order.shippingInfo.commune})`
             : 'التوصيل إلى مكتب البريد';
@@ -284,22 +285,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Event Listeners and Initial Setup ---
 
+    // Populate wilayas on page load
     populateWilayas();
+
+    // Initial calculation of product subtotal
     calculateProductsSubtotal();
     
+    // Set initial delivery method based on radio checked state
     if (deliveryToHomeRadio.checked) {
         selectedDeliveryMethod = 'home';
-    } else {
+    } else { // default to office
         selectedDeliveryMethod = 'office';
     }
-    updateOrderTotals();
+    updateOrderTotals(); // Initial update of totals (important to show initial delivery price)
 
+    // Event listener for wilaya selection change
     wilayaSelect.addEventListener('change', () => {
         const selectedWilayaName = wilayaSelect.value;
         selectedWilayaData = wilayaPrices.find(w => w.name === selectedWilayaName);
         updateOrderTotals();
     });
 
+    // Event listener for delivery method change
     deliveryMethodRadios.forEach(radio => {
         radio.addEventListener('change', (event) => {
             selectedDeliveryMethod = event.target.value;
@@ -320,7 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('الرجاء إدخال رقم الهاتف الأساسي.');
             return;
         }
-        if (phoneInput.value.trim().length < 9 || !/^\d+$/.test(phoneInput.value.trim())) {
+        if (phoneInput.value.trim().length < 9 || !/^\d+$/.test(phoneInput.value.trim())) { // At least 9 digits, digits only
              alert('رقم الهاتف الأساسي غير صحيح. الرجاء إدخال 9 أرقام على الأقل.');
              return;
         }
@@ -339,11 +346,14 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
+        // Ensure wilaya and delivery method are correctly set before order creation
         if (!selectedWilayaData) {
+            // This should ideally not happen if Wilaya select is required, but as a safeguard
             alert('الرجاء اختيار ولاية صالحة قبل تأكيد الطلب.');
             return;
         }
 
+        // Construct shipping information
         const shippingInfo = {
             fullName: fullNameInput.value.trim(),
             phone: phoneInput.value.trim(),
@@ -351,9 +361,10 @@ document.addEventListener('DOMContentLoaded', () => {
             wilaya: wilayaSelect.value,
             deliveryMethod: selectedDeliveryMethod,
             commune: selectedDeliveryMethod === 'home' ? communeInput.value.trim() : 'غير قابل للتطبيق',
-            paymentMethod: "cashOnDelivery"
+            paymentMethod: "cashOnDelivery" // الدفع عند الاستلام
         };
 
+        // Construct the full order object
         const order = {
             id: 'ORD-' + Date.now(),
             date: new Date().toLocaleString('ar-DZ', { timeZone: 'Africa/Algiers' }),
@@ -365,31 +376,31 @@ document.addEventListener('DOMContentLoaded', () => {
             status: 'Pending'
         };
 
-        // ✅ إرسال إلى Discord أولاً
+        // Attempt to send to Discord
         const webhookSent = await sendToDiscordWebhook(order);
 
         if (webhookSent) {
-            // ✅ ثم إرسال إلى Google Sheets
+            // بعد التأكد من نجاح إرسال Discord، أرسل إلى Google Sheets
             const sheetsSent = await sendToGoogleSheets(order);
-            
-            if (sheetsSent) {
-                console.log('✅ Order saved to both Discord and Google Sheets');
-            } else {
-                console.warn('⚠️ Order saved to Discord but failed to save to Google Sheets');
-                // لا نمنع المستخدم من إكمال الطلب حتى لو فشل Google Sheets
+            if (!sheetsSent) {
+                console.warn('Failed to save to Google Sheets, but Discord sent successfully.');
             }
 
-            // حفظ الطلب في localStorage
+            // Save the order to localStorage (optional, for history or admin panel)
             let allOrders = JSON.parse(localStorage.getItem('qudwahOrders')) || [];
             allOrders.push(order);
             localStorage.setItem('qudwahOrders', JSON.stringify(allOrders));
 
-            // مسح السلة
+            // Clear the cart after placing the order
             localStorage.removeItem('qudwahCart');
             cart = [];
-            updateGlobalCartCount();
+            updateGlobalCartCount(); // Update header count to 0
 
-            // تتبع Facebook Pixel
+            // Redirect to confirmation page (create this next)
+            if (confirm('لقد تم استلام طلبك ، سنتصل بك للتأكيد. اضغط موافق للعودة للصفحة الرئيسية.')) {
+                window.location.href = 'index.html';
+            }
+            // بعد تأكيد الطلب بنجاح
             fbq('track', 'Purchase', {
                 value: order.totalAmount,
                 currency: 'DZD',
@@ -399,19 +410,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     item_price: item.price
                 }))
             });
-
-            if (confirm('✅ لقد تم استلام طلبك، سنتصل بك للتأكيد. اضغط موافق للعودة للصفحة الرئيسية.')) {
-                window.location.href = 'index.html';
-            }
+        } else {
+            // If webhook failed, alert was already shown by sendToDiscordWebhook
+            // Do not clear cart or redirect, allow user to retry
         }
     });
 
-    // تحميل المعلومات المحفوظة
+    // Optional: Load saved info if available from previous session (user convenience)
     const savedInfo = JSON.parse(localStorage.getItem('qudwahShippingInfo'));
     if (savedInfo) {
         fullNameInput.value = savedInfo.fullName || '';
         phoneInput.value = savedInfo.phone || '';
         alternativePhoneInput.value = savedInfo.alternativePhone || '';
+        heightInput.value = savedInfo.height || '';
+        weightInput.value = savedInfo.weight || '';
         
         if (savedInfo.wilaya) {
             wilayaSelect.value = savedInfo.wilaya;
@@ -422,36 +434,42 @@ document.addEventListener('DOMContentLoaded', () => {
             deliveryToHomeRadio.checked = true;
             selectedDeliveryMethod = 'home';
             communeInput.value = savedInfo.commune || '';
-        } else {
+        } else { // default to office
             deliveryToOfficeRadio.checked = true;
             selectedDeliveryMethod = 'office';
         }
-        updateOrderTotals();
+        updateOrderTotals(); // Recalculate totals based on loaded info
     } else {
+        // Ensure initial calculation runs even if no saved info
         calculateProductsSubtotal();
         updateOrderTotals();
     }
 
-    // حفظ المعلومات عند الإدخال
+    // Save info to localStorage on input change (for user convenience, to persist inputs if they leave)
     const saveInfoOnInput = () => {
         const currentInfo = {
             fullName: fullNameInput.value.trim(),
             phone: phoneInput.value.trim(),
             alternativePhone: alternativePhoneInput.value.trim(),
             wilaya: wilayaSelect.value,
-            deliveryMethod: selectedDeliveryMethod,
-            commune: communeInput.value.trim()
+            deliveryMethod: selectedDeliveryMethod, // Ensure this reflects current radio selection
+            commune: communeInput.value.trim(),
+            height: heightInput.value ? parseInt(heightInput.value) : null,
+            weight: weightInput.value ? parseInt(weightInput.value) : null
         };
         localStorage.setItem('qudwahShippingInfo', JSON.stringify(currentInfo));
     };
 
+    // Attach saveInfoOnInput to relevant input changes
     fullNameInput.addEventListener('input', saveInfoOnInput);
     phoneInput.addEventListener('input', saveInfoOnInput);
     alternativePhoneInput.addEventListener('input', saveInfoOnInput);
     wilayaSelect.addEventListener('change', saveInfoOnInput);
     deliveryMethodRadios.forEach(radio => radio.addEventListener('change', () => {
-        selectedDeliveryMethod = radio.value;
+        selectedDeliveryMethod = radio.value; // Update selectedDeliveryMethod when radio changes
         saveInfoOnInput();
     }));
     communeInput.addEventListener('input', saveInfoOnInput);
+    heightInput.addEventListener('input', saveInfoOnInput);
+    weightInput.addEventListener('input', saveInfoOnInput);
 });
