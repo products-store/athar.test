@@ -1,9 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
     // Discord Webhook URL - IMPORTANT: In a real production app, this should be sent from a backend server, not directly from frontend.
-    const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1450619362489929779/aY4FOLWR4zZPvaUhNrgpApklD2-58nOvzEvgzMulspgLv6n4XSy3K1ahaWvKPq3pGf0r';
-    
-    // Google Sheets Web App URL - استبدله برابط الـ Web App الخاص بك
-    const GOOGLE_SHEETS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbw2PSjFtVAY_R8AmyV5dAW9Tzf3Ni5lmz9jwqt8SrIwIRJqK05Wl_VLjWpgn5Mjx5d6/exec';
+    const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1481703762274947106/Bda8WkM_WQyKA9_RbJBwjDoqBrl-fxxB4zYyJqApA5c1NLVQv6jc3q8yCuIqZc-afe_Y';
+
+    // Google Sheets Web App URL
+    const GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbw3GvQ4xveSttweL5y713-xEBOtMbOuXCbmDcS-XtODXzapSq6ZZeuioJrI-W8-8-o2cA/exec';
 
     // Data for Algerian Wilayas (Provinces) and delivery prices
     const wilayaPrices = [
@@ -63,6 +63,17 @@ document.addEventListener('DOMContentLoaded', () => {
         { name: 'المنيعة', home: 1100, office: null, cancel: 200 }
     ];
 
+
+
+
+
+
+
+
+
+
+
+
     // --- DOM Elements ---
     const shippingForm = document.getElementById('shipping-form');
     const fullNameInput = document.getElementById('fullName');
@@ -109,7 +120,6 @@ document.addEventListener('DOMContentLoaded', () => {
             cartCountElement.textContent = totalItems;
         }
     };
-    
     // Populate Wilaya dropdown
     const populateWilayas = () => {
         wilayaPrices.forEach(wilaya => {
@@ -164,124 +174,98 @@ document.addEventListener('DOMContentLoaded', () => {
         orderGrandTotalElement.textContent = `${currentTotal.toLocaleString('ar-DZ')} د.ج`;
     };
 
-    // دالة إرسال الطلب إلى Google Sheets
-    const sendToGoogleSheets = async (order) => {
-        // بناء البيانات المرسلة
-        const sheetData = {
-            orderId: order.id,
-            date: order.date,
-            fullName: order.shippingInfo.fullName,
-            phone: order.shippingInfo.phone,
-            alternativePhone: order.shippingInfo.alternativePhone,
-            wilaya: order.shippingInfo.wilaya,
-            deliveryMethod: order.shippingInfo.deliveryMethod === 'home' ? 'توصيل للمنزل' : 'توصيل للمكتب',
-            commune: order.shippingInfo.commune,
-            productName: order.items.map(item => item.name).join(', '),
-            color: order.items.map(item => item.color).join(', '),
-            size: order.items.map(item => item.size).join(', '),
-            quantity: order.items.reduce((sum, item) => sum + item.quantity, 0),
-            unitPrice: order.items.length > 0 ? order.items[0].price : 0,
-            productsTotal: order.productsTotal,
-            deliveryCost: order.deliveryCost,
-            totalAmount: order.totalAmount,
-            status: order.status,
-            itemsList: order.items.map(item => 
-                `${item.name} (${item.color}، ${item.size}) × ${item.quantity} = ${(item.price * item.quantity).toLocaleString('ar-DZ')} د.ج`
-            ).join(' | ')
-        };
 
-        try {
-            const response = await fetch(GOOGLE_SHEETS_WEBHOOK_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(sheetData),
-            });
+// Send data to Discord webhook
+const sendToDiscordWebhook = async (order) => {
+    // إنشاء قائمة المنتجات بشكل منظم
+    const orderItemsList = order.items.map(item => 
+        `${item.name} (${item.color}، ${item.size}) × ${item.quantity} = ${(item.price * item.quantity).toLocaleString('ar-DZ')} د.ج`
+    ).join('\n');
 
-            const result = await response.json();
-            if (!response.ok || !result.success) {
-                console.error('Google Sheets Error:', result);
-                return false;
-            }
-            console.log('Order saved to Google Sheets successfully!');
-            return true;
-        } catch (error) {
-            console.error('Error sending to Google Sheets:', error);
-            return false;
-        }
-    };
+    // تحديد طريقة التوصيل
+    const deliveryMethodText = order.shippingInfo.deliveryMethod === 'home' 
+        ? `التوصيل إلى المنزل (${order.shippingInfo.commune})`
+        : 'التوصيل إلى مكتب البريد';
 
-    // Send data to Discord webhook
-    const sendToDiscordWebhook = async (order) => {
-        // إنشاء قائمة المنتجات بشكل منظم
-        const orderItemsList = order.items.map(item => 
-            `${item.name} (${item.color}، ${item.size}) × ${item.quantity} = ${(item.price * item.quantity).toLocaleString('ar-DZ')} د.ج`
-        ).join('\n');
-
-        // تحديد طريقة التوصيل
-        const deliveryMethodText = order.shippingInfo.deliveryMethod === 'home' 
-            ? `التوصيل إلى المنزل (${order.shippingInfo.commune})`
-            : 'التوصيل إلى مكتب البريد';
-
-        const webhookPayload = {
-            username: "ATHAR Order Bot",
-            embeds: [
-                {
-                    title: "طلب جديد 📦",
-                    color: 0x28A745,
-                    fields: [
-                        {
-                            name: "معلومات العميل",
-                            value: `**الاسم:** ${order.shippingInfo.fullName}\n**الهاتف:** ${order.shippingInfo.phone}\n**الهاتف الاحتياطي:** ${order.shippingInfo.alternativePhone}`,
-                            inline: false
-                        },
-                        {
-                            name: "معلومات التوصيل",
-                            value: `**الولاية:** ${order.shippingInfo.wilaya}\n**${deliveryMethodText}**`,
-                            inline: false
-                        },
-                        {
-                            name: "المنتجات",
-                            value: orderItemsList || "لا توجد منتجات",
-                            inline: false
-                        },
-                        {
-                            name: "الفاتورة",
-                            value: `**المجموع الجزئي:** ${order.productsTotal.toLocaleString('ar-DZ')} د.ج\n**تكلفة التوصيل:** ${order.deliveryCost.toLocaleString('ar-DZ')} د.ج\n**المجموع الكلي:** ${order.totalAmount.toLocaleString('ar-DZ')} د.ج`,
-                            inline: false
-                        }
-                    ],
-                    timestamp: new Date().toISOString(),
-                    footer: {
-                        text: "ATHAR Store - " + new Date().toLocaleString('ar-DZ')
+    const webhookPayload = {
+        username: "ATHAR Order Bot",
+        embeds: [
+            {
+                title: "طلب جديد 📦",
+                color: 0x28A745,
+                fields: [
+                    {
+                        name: "معلومات العميل",
+                        value: `**الاسم:** ${order.shippingInfo.fullName}\n**الهاتف:** ${order.shippingInfo.phone}\n**الهاتف الاحتياطي:** ${order.shippingInfo.alternativePhone}`,
+                        inline: false
+                    },
+                    {
+                        name: "معلومات التوصيل",
+                        value: `**الولاية:** ${order.shippingInfo.wilaya}\n**${deliveryMethodText}**`,
+                        inline: false
+                    },
+                    {
+                        name: "المنتجات",
+                        value: orderItemsList || "لا توجد منتجات",
+                        inline: false
+                    },
+                    {
+                        name: "الفاتورة",
+                        value: `**المجموع الجزئي:** ${order.productsTotal.toLocaleString('ar-DZ')} د.ج\n**تكلفة التوصيل:** ${order.deliveryCost.toLocaleString('ar-DZ')} د.ج\n**المجموع الكلي:** ${order.totalAmount.toLocaleString('ar-DZ')} د.ج`,
+                        inline: false
                     }
+                ],
+                timestamp: new Date().toISOString(),
+                footer: {
+                    text: "ATHAR Store - " + new Date().toLocaleString('ar-DZ')
                 }
-            ]
-        };
-
-        try {
-            const response = await fetch(DISCORD_WEBHOOK_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(webhookPayload),
-            });
-
-            if (!response.ok) {
-                console.error('Failed to send webhook:', response.status, response.statusText);
-                alert(`حدث خطأ أثناء إرسال الطلب (${response.status}). الرجاء المحاولة مرة أخرى أو الاتصال بالدعم.`);
-                return false;
             }
-            console.log('Webhook sent successfully!');
-            return true;
-        } catch (error) {
-            console.error('Error sending webhook:', error);
-            alert('حدث خطأ في الاتصال. الرجاء التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى.');
+        ]
+    };
+
+    try {
+        const response = await fetch(DISCORD_WEBHOOK_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(webhookPayload),
+        });
+
+        if (!response.ok) {
+            console.error('Failed to send webhook:', response.status, response.statusText);
+            alert(`حدث خطأ أثناء إرسال الطلب (${response.status}). الرجاء المحاولة مرة أخرى أو الاتصال بالدعم.`);
             return false;
         }
-    };
+        console.log('Webhook sent successfully!');
+        return true;
+    } catch (error) {
+        console.error('Error sending webhook:', error);
+        alert('حدث خطأ في الاتصال. الرجاء التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى.');
+        return false;
+    }
+};
+
+
+const sendToGoogleSheets = async (order) => {
+    try {
+        // نستخدم text/plain لتجاوز مشاكل الـ CORS في المتصفح مع Google Apps Script
+        const response = await fetch(GOOGLE_SHEETS_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'text/plain;charset=utf-8',
+            },
+            body: JSON.stringify(order)
+        });
+        
+        console.log('Sheet sent successfully!');
+        return true;
+    } catch (error) {
+        console.error('Error sending to Google Sheets:', error);
+        return false;
+    }
+};
+
 
     // --- Event Listeners and Initial Setup ---
 
@@ -298,6 +282,7 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedDeliveryMethod = 'office';
     }
     updateOrderTotals(); // Initial update of totals (important to show initial delivery price)
+
 
     // Event listener for wilaya selection change
     wilayaSelect.addEventListener('change', () => {
@@ -353,16 +338,17 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+
         // Construct shipping information
-        const shippingInfo = {
-            fullName: fullNameInput.value.trim(),
-            phone: phoneInput.value.trim(),
-            alternativePhone: alternativePhoneInput.value.trim() || 'لا يوجد',
-            wilaya: wilayaSelect.value,
-            deliveryMethod: selectedDeliveryMethod,
-            commune: selectedDeliveryMethod === 'home' ? communeInput.value.trim() : 'غير قابل للتطبيق',
-            paymentMethod: "cashOnDelivery" // الدفع عند الاستلام
-        };
+const shippingInfo = {
+    fullName: fullNameInput.value.trim(),
+    phone: phoneInput.value.trim(),
+    alternativePhone: alternativePhoneInput.value.trim() || 'لا يوجد',
+    wilaya: wilayaSelect.value,
+    deliveryMethod: selectedDeliveryMethod,
+    commune: selectedDeliveryMethod === 'home' ? communeInput.value.trim() : 'غير قابل للتطبيق',
+    paymentMethod: "cashOnDelivery" // الدفع عند الاستلام
+};
 
         // Construct the full order object
         const order = {
@@ -378,42 +364,39 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Attempt to send to Discord
         const webhookSent = await sendToDiscordWebhook(order);
+        const sheetSent = await sendToGoogleSheets(order); // إضافة الإرسال لـ Google Sheets
 
-        if (webhookSent) {
-            // بعد التأكد من نجاح إرسال Discord، أرسل إلى Google Sheets
-            const sheetsSent = await sendToGoogleSheets(order);
-            if (!sheetsSent) {
-                console.warn('Failed to save to Google Sheets, but Discord sent successfully.');
-            }
+if (webhookSent) {
 
-            // Save the order to localStorage (optional, for history or admin panel)
-            let allOrders = JSON.parse(localStorage.getItem('qudwahOrders')) || [];
-            allOrders.push(order);
-            localStorage.setItem('qudwahOrders', JSON.stringify(allOrders));
+    // Save the order to localStorage (optional, for history or admin panel)
+    let allOrders = JSON.parse(localStorage.getItem('qudwahOrders')) || [];
+    allOrders.push(order);
+    localStorage.setItem('qudwahOrders', JSON.stringify(allOrders));
 
-            // Clear the cart after placing the order
-            localStorage.removeItem('qudwahCart');
-            cart = [];
-            updateGlobalCartCount(); // Update header count to 0
+    // Clear the cart after placing the order
+    localStorage.removeItem('qudwahCart');
+    cart = [];
+    updateGlobalCartCount(); // Update header count to 0
 
-            // Redirect to confirmation page (create this next)
-            if (confirm('لقد تم استلام طلبك ، سنتصل بك للتأكيد. اضغط موافق للعودة للصفحة الرئيسية.')) {
-                window.location.href = 'index.html';
-            }
-            // بعد تأكيد الطلب بنجاح
-            fbq('track', 'Purchase', {
-                value: order.totalAmount,
-                currency: 'DZD',
-                contents: order.items.map(item => ({
-                    id: item.id,
-                    quantity: item.quantity,
-                    item_price: item.price
-                }))
-            });
-        } else {
-            // If webhook failed, alert was already shown by sendToDiscordWebhook
-            // Do not clear cart or redirect, allow user to retry
-        }
+    // Redirect to confirmation page (create this next)
+    if (confirm('لقد تم استلام طلبك ، سنتصل بك للتأكيد. اضغط موافق للعودة للصفحة الرئيسية.')) {
+        window.location.href = 'index.html';
+    }
+// بعد تأكيد الطلب بنجاح
+fbq('track', 'Purchase', {
+    value: order.totalAmount,
+    currency: 'DZD',
+    contents: order.items.map(item => ({
+        id: item.id,
+        quantity: item.quantity,
+        item_price: item.price
+    }))
+});
+} else {
+    // If webhook failed, alert was already shown by sendToDiscordWebhook
+    // Do not clear cart or redirect, allow user to retry
+}
+
     });
 
     // Optional: Load saved info if available from previous session (user convenience)
@@ -444,6 +427,7 @@ document.addEventListener('DOMContentLoaded', () => {
         calculateProductsSubtotal();
         updateOrderTotals();
     }
+
 
     // Save info to localStorage on input change (for user convenience, to persist inputs if they leave)
     const saveInfoOnInput = () => {
