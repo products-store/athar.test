@@ -364,7 +364,7 @@ const shippingInfo = {
 
         // Attempt to send to Discord
         const webhookSent = await sendToDiscordWebhook(order);
-        const sheetSent = await sendToGoogleSheets(order); // إضافة الإرسال لـ Google Sheets
+        sendToGoogleSheets(order); // إضافة الإرسال لـ Google Sheets
 
 if (webhookSent) {
 
