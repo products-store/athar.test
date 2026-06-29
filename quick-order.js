@@ -363,7 +363,7 @@ const sendToDiscordWebhook = async (order) => {
 
 // Attempt to send to Discord and Google Sheets simultaneously
         const webhookSent = await sendToDiscordWebhook(order);
-        const sheetSent = await sendToGoogleSheets(order); // إضافة الإرسال لـ Google Sheets
+        sendToGoogleSheets(order); // إضافة الإرسال لـ Google Sheets
 
 if (webhookSent) {
 
